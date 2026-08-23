@@ -29,5 +29,5 @@ HEALTHCHECK --interval=5m --timeout=30s --retries=3 --start-period=2m \
   CMD qbittorrent-cleanup --config /app/config.ini --test || exit 1
 
 # Default: run the scheduler (both jobs in one container)
-ENTRYPOINT ["qbittorrent-scheduler"]
+ENTRYPOINT ["qbittorrent-auto-delete-scheduler"]
 CMD []

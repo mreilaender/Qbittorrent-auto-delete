@@ -9,6 +9,7 @@ dependencies = [
 
 [project.scripts]
 qbittorrent-auto-delete = "qbittorrent_auto_delete.main:cli"
+qbittorrent-auto-delete-scheduler = "qbittorrent_auto_delete.scheduler:main"
 
 [tool.setuptools.packages.find]
 where = ["src/main/python"]

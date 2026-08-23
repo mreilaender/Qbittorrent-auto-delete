@@ -167,7 +167,7 @@ def main() -> int:
     # Main loop
     while not _shutdown_requested:
         schedule.run_pending()
-        time.sleep(60)
+        time.sleep(60) # TODO: shutdown signal not handled immediately
 
     _scheduler_logger.info("Shutdown requested, draining...")
     # Drain remaining scheduled jobs

@@ -1,6 +1,10 @@
 .git
 .github
-*.pyc
+.venv
+*.egg-info
+build/
+.idea
 __pycache__
+*.pyc
 *.json
 .deletelog.txt

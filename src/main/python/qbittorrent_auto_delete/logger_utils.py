@@ -80,7 +80,7 @@ def _calculate_average_ratio(torrent: dict, ratio_log: dict, logger: logging.Log
     between main.py (which calls log_torrent_removal_info) and torrent_utils
     (which is already imported).
     """
-    import torrent_utils
+    from qbittorrent_auto_delete import torrent_utils
 
     ratio_records = ratio_log.get(torrent['hash'], [])
     current_ratio = torrent['ratio']

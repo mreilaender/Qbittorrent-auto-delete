@@ -18,8 +18,7 @@ from logging import Logger
 
 import schedule
 
-import logger_utils
-import torrent_utils
+from qbittorrent_auto_delete import logger_utils,torrent_utils
 
 __version__ = "0.1.0"
 

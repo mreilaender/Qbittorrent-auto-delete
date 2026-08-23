@@ -214,6 +214,7 @@ def cli() -> int:
 
     # Setup session
     session = requests.Session()
+    session.verify = False
     torrent_utils.setup_session_auth(session, config)
 
     return run_cleanup(config, logger, session, args.test, state_dir)

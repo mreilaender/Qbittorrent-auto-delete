@@ -500,6 +500,10 @@ def remove_torrents_by_space(torrents: List[Dict[str, Any]], categories_space: L
             failed_removals += 1
             continue
 
+        if test_mode:
+            print(torrent)
+            logger.info("%s ", test_mode)
+
         space_freed += torrent['size'] / BYTES_TO_GB
         torrents_removed_info.append(_build_torrent_info(torrent))
 

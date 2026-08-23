@@ -11,11 +11,6 @@ WORKDIR /app
 # Install package (no -e, no editable mode)
 COPY --from=builder /install /usr/local
 
-# Non-root user
-RUN groupadd -r app && useradd -r -g app -d /app -s /sbin/nologin app
-RUN chown -R app:app /app
-USER app
-
 # State & config directory
 ENV STATE_DIR=/app
 ENV CONFIG_PATH=/app/config.ini

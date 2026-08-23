@@ -1,0 +1,6 @@
+.git
+.github
+*.pyc
+__pycache__
+*.json
+.deletelog.txt

@@ -1,3 +1,4 @@
 config.ini
 torrent_ratio_log.json
-deletelog.txt
+ratio_grace_state.json
+.idea

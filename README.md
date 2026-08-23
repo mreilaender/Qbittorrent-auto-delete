@@ -34,22 +34,40 @@ Torrents are prioritized for deletion based on their seeding ratio over the last
 - Optional hardlink protection: skip torrents whose files are hardlinked elsewhere (deleting them would free no space anyway)
 - **API key authentication** (qBittorrent ≥ 5.2.0) with username/password fallback for older versions
 - Test mode for safe execution without actual deletions
-- Detailed logging of actions and decisions (newest run at the top of the log)
+- Detailed logging to stdout with tag-based separation ([cleanup], [scheduler])
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.8+ (for direct execution)
 - qBittorrent with Web UI enabled (any recent version; API key auth requires ≥ 5.2.0)
-- `requests` library
+- `requests` library (auto-installed via pip)
 
-## Installation and Usage
+## Installation
 
-1. Clone this repository
-2. Install the required Python packages: `pip install -r requirements.txt`
-3. Copy `config.example.ini` to `config.ini` and edit it (every setting is documented in the file)
-4. Run the script: `python main.py`
+### Via pip (recommended)
 
-To run in test mode (no actual deletions), use: `python main.py --test`
+```bash
+pip install .
+```
+
+This installs two commands: `qbittorrent-cleanup` (single run) and `qbittorrent-scheduler` (continuous loop).
+
+### Direct execution
+
+```bash
+python main.py [--test]
+python scheduler.py
+```
+
+## Configuration
+
+The scripts use a `config.ini` file. Resolve the path in this order:
+
+1. `CONFIG_PATH` environment variable
+2. `--config` CLI flag (both commands)
+3. `STATE_DIR/config.ini` (default: current directory)
+
+See `config.ini` for a fully documented template covering seeding rules, bonus rules, the ratio grace period, hardlink checking, and path mapping.
 
 ## Authentication
 
@@ -59,115 +77,148 @@ Two ways to let the scripts talk to qBittorrent, configured in the `[login]` sec
 
 **Username/password (any version):** leave `api_key` empty and fill in `username` and `password` with your Web UI credentials.
 
-## Configuration
+## Commands
 
-The scripts use a `config.ini` file located next to them. See `config.example.ini` for a fully documented template covering seeding rules, bonus rules, the ratio grace period, hardlink checking, and path mapping.
+### Cleanup
+
+Removes torrents based on configured rules:
+
+```bash
+qbittorrent-cleanup --config /path/to/config.ini
+qbittorrent-cleanup --test          # preview only
+python main.py --test               # direct execution
+```
+
+### Scheduler
+
+Runs cleanup at a configurable interval, optionally logging torrent ratios daily:
+
+```bash
+qbittorrent-scheduler
+qbittorrent-scheduler --cleanup-interval 2   # every 2 hours
+qbittorrent-scheduler --no-cleanup           # only ratio log (no cleanup)
+qbittorrent-scheduler --config /path/to/config.ini
+```
+
+**Environment variables:**
+
+| Variable | Default | Description |
+|---|---|---|
+| `CLEANUP_INTERVAL` | `1` | Cleanup interval in hours |
+| `CONFIG_PATH` | *(see resolution order above)* | Path to config.ini |
+| `STATE_DIR` | `.` (script directory) | Directory for JSON state files |
+
+The scheduler handles graceful shutdown on SIGTERM/SIGINT: it sets a flag, drains pending jobs, then exits.
+
+## Logging
+
+All output goes to **stdout** with tag-based prefixes so multiple modules are distinguishable:
+
+```
+2025-01-15 03:00:00 [cleanup] INFO     Free: 12.34 GB, DLremain: 45.6 GB, Diskneed: 237 GB
+2025-01-15 03:00:01 [cleanup] INFO     MyTorrent.mkv       EX1   250.00 GB     45.2 Weeks     0.012 R/W
+2025-01-15 03:00:01 [scheduler] INFO   Cleanup job scheduled every 1 hour(s)
+```
+
+- `[cleanup]` — cleanup job output
+- `[scheduler]` — scheduler lifecycle messages
+
+Log level is set in `config.ini` under `[logging] log_level` (DEBUG, INFO, WARNING, ERROR).
 
 ## Files created by the scripts
 
 | File | Purpose |
 |---|---|
-| `deletelog.txt` | Human-readable log, newest run at the top (rotating, max 3 backups of 1 MB) |
-| `torrent_ratio_log.json` | Daily ratio history per torrent, written by `torrent_ratio_logger.py` |
+| `torrent_ratio_log.json` | Daily ratio history per torrent (if ratio log job runs) |
 | `ratio_grace_state.json` | Grace-period timestamps, managed automatically (self-cleaning) |
 
-All of these clean themselves up as torrents come and go - including torrents you remove manually.
-
-## Torrent Ratio Logger
-
-A separate module (`torrent_ratio_logger.py`) manages the `torrent_ratio_log.json` file, tracking ratio history of torrents over time. This history is what the removal prioritization is based on, so let it run for a few days before expecting accurate "average weekly ratio" ordering.
-
-## Recommended Usage
-
-1. Run `torrent_ratio_logger.py` once daily.
-2. Run `main.py` every hour (or more often).
-
-Note: the ratio grace period clock starts when `main.py` first *observes* a torrent at its ratio target, so the effective grace is between `ratio_grace_seconds` and `ratio_grace_seconds` + your run interval. With hourly runs and the default 3600 s, torrents keep seeding roughly 1-2 hours after hitting their target.
-
-### Automating
-
-Add to your crontab in Linux / User Scripts in Unraid / Task Scheduler in Windows:
-
-    0 0 * * * /usr/bin/python /path/to/your/torrent_ratio_logger.py
-    0 * * * * /usr/bin/python /path/to/your/main.py
-    @reboot pip install -r /path/to/your/requirements.txt
-
-Both scripts exit with a non-zero exit code on failure, so cron/systemd failure notifications work out of the box.
+All JSON state files are written to the directory resolved by `STATE_DIR`.
 
 ## Test Mode
 
 Run with the `--test` flag to see potential actions without making changes:
 
-    python main.py --test
+```bash
+qbittorrent-cleanup --test
+python main.py --test
+```
 
-The planned removals are written to `deletelog.txt` exactly as a real run would, prefixed with `TEST MODE`. Recommended after every rule change.
+The planned removals are logged to stdout exactly as a real run would, prefixed with `TEST MODE`. Recommended after every rule change.
 
 ---
 
-# Unraid Setup Guide
+## Running with Docker
 
-Follow the steps below to install Python, configure your script, and set up automated tasks.
+### Build
 
-### Prerequisites
-Before starting, ensure you have the following installed on your Unraid system:
+```bash
+docker build -t qbittorrent-auto-delete .
+```
 
-- Nerd Tools Addon (for Python 3 installation)
-- User Scripts Addon (for managing your scripts)
+### Run the scheduler (recommended)
 
-### Step 1: Edit Your Configuration
-Copy `config.example.ini` to `config.ini` and customize it according to your preferences.
+```bash
+docker run -d \
+  --name qbittorrent-cleanup \
+  -v /path/to/config.ini:/app/config.ini \
+  qbittorrent-auto-delete
+```
 
-### Step 2: Install Required Packages at Startup
-To install Python packages automatically at array startup, use the following script:
+All persistent files (config + JSON state) live in the mounted volume. The scheduler runs both the cleanup and ratio log jobs.
 
-    #!/bin/bash
-    # This script installs pip and required Python packages at boot
+### Run cleanup only (ad-hoc)
 
-    # Check if pip is already installed
-    if ! command -v pip3 &> /dev/null
-    then
-        echo "pip not found, installing..."
-        # Download get-pip.py
-        curl -s https://bootstrap.pypa.io/get-pip.py -o /boot/config/get-pip.py
-        # Install pip
-        python3 /boot/config/get-pip.py
-    else
-        echo "pip already installed"
-    fi
+```bash
+docker run --rm \
+  -v /path/to/config.ini:/app/config.ini \
+  qbittorrent-auto-delete qbittorrent-cleanup --test
+```
 
-    # Install required Python packages
-    python3 -m pip install --quiet requests
+### Override scheduler settings
 
-    echo "Python environment setup complete."
+```bash
+docker run -d \
+  --name qbittorrent-cleanup \
+  -v /path/to/config.ini:/app/config.ini \
+  -e CLEANUP_INTERVAL=2 \
+  -e STATE_DIR=/data \
+  -v /path/to/data:/data \
+  qbittorrent-auto-delete
+```
 
-Save this script and configure it to run at array startup using the User Scripts addon.
+### Environment variables (Docker)
 
-### Step 3: Set Up Logging
-To log torrent ratios daily, use the following script. Schedule it to run daily at 00:01:
+| Variable | Default | Description |
+|---|---|---|
+| `CLEANUP_INTERVAL` | `1` | Cleanup interval in hours |
+| `CONFIG_PATH` | `/app/config.ini` | Path to config.ini inside container |
+| `STATE_DIR` | `/app` | Directory for JSON state files |
 
-    #!/bin/bash
-    python3 /mnt/path/torrent_ratio_logger.py
+### Healthcheck
 
-Set up a cron job with the following timing:
+The image includes a built-in Docker healthcheck that runs cleanup in `--test` mode every 5 minutes:
 
-    1 0 * * *
+```bash
+docker inspect --format='{{.State.Health.Status}}' qbittorrent-cleanup
+```
 
-This configuration runs the script every day at 00:01 AM.
+### Docker volume
 
-### Step 4: Run the Main Script
+The container declares `VOLUME ["/app"]`. Mount a bind volume or named volume to `/app` for config and state persistence:
 
-    #!/bin/bash
-    python3 /mnt/path/main.py
+```bash
+docker run -d \
+  -v qbittorrent-data:/app \
+  -v /path/to/config.ini:/app/config.ini \
+  qbittorrent-auto-delete
+```
 
-Set up a cron job with the following timing or whatever you would like:
+## Test Mode
 
-    15 * * * *
+Run with the `--test` flag to see potential actions without making changes:
 
-This configuration runs the script every hour at 15 minutes past.
+```bash
+python main.py --test
+```
 
-### Step 5: Test Mode
-To test changes without making actual deletions, add the `--test` flag:
-
-    python3 /mnt/path/main.py --test
-
-This simulates the actions, and `deletelog.txt` will show what the script would have done without making any real changes.
+The planned removals are written to stdout exactly as a real run would, prefixed with `TEST MODE`. Recommended after every rule change.

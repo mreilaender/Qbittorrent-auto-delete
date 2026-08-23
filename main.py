@@ -1,14 +1,14 @@
 """qBittorrent cleanup: removes seeded-out torrents to maintain free disk
 space and per-category torrent counts, according to rules in config.ini.
 
-Usage:
-    python main.py [--test]
-
---test logs what would be removed without actually removing anything.
+CLI entry points:
+    python main.py [--test]                     # direct execution
+    qbittorrent-cleanup [--test]                # via pip install
 """
 
 import sys
 import os
+import argparse
 from typing import List, Dict, Any
 from logging import Logger
 from configparser import ConfigParser
@@ -18,9 +18,35 @@ import requests
 import logger_utils
 import torrent_utils
 
+__version__ = "0.1.0"
+
+
+def _resolve_config_path() -> str:
+    """Resolve config path: CONFIG_PATH env → --config flag → STATE_DIR/config.ini → ./config.ini."""
+    from_env = os.environ.get('CONFIG_PATH', '').strip()
+    if from_env:
+        return from_env
+    return './config.ini'
+
+
+def _resolve_state_dir() -> str:
+    """Resolve state directory: STATE_DIR env → script directory."""
+    from_env = os.environ.get('STATE_DIR', '').strip()
+    if from_env:
+        return from_env
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _load_config(config_path: str) -> ConfigParser:
+    """Load configuration from the given config file path."""
+    config = ConfigParser()
+    config.read(config_path)
+    return config
+
 
 def check_space_and_remove_torrents(session: requests.Session, logger: Logger, config: ConfigParser,
-                                    test_mode: bool, bonus_rules: Dict[str, Dict[str, Any]]) -> None:
+                                    test_mode: bool, bonus_rules: Dict[str, Dict[str, Any]],
+                                    state_dir: str) -> None:
     api_address = config.get('login', 'address')
     download_minspace_gb_raw = config.get('cleanup', 'download_minspace_gb', fallback='')
     min_space_gb = config.getfloat('cleanup', 'min_space_gb')
@@ -29,16 +55,15 @@ def check_space_and_remove_torrents(session: requests.Session, logger: Logger, c
     categories_count = torrent_utils.parse_category_list(
         config.get('cleanup', 'categories_to_check_for_number', fallback=''))
 
-    script_directory = os.path.dirname(os.path.abspath(__file__))
     configured_drive_path = config.get('cleanup', 'drive_path', fallback='').strip()
-    drive_path = configured_drive_path if configured_drive_path else script_directory
+    drive_path = configured_drive_path if configured_drive_path else state_dir
 
     free_space = torrent_utils.get_free_space(drive_path)
 
     # Load the ratio log once; it is passed around as a dict instead of being
     # re-read from disk for every torrent.
     ratio_log = torrent_utils.load_ratio_log(
-        os.path.join(script_directory, 'torrent_ratio_log.json'))
+        os.path.join(state_dir, 'torrent_ratio_log.json'))
 
     try:
         all_torrents = torrent_utils.get_torrent_list(session, api_address, logger)
@@ -79,7 +104,7 @@ def check_space_and_remove_torrents(session: requests.Session, logger: Logger, c
         category_rules,
         logger,
         config,
-        os.path.join(script_directory, 'ratio_grace_state.json')
+        os.path.join(state_dir, 'ratio_grace_state.json')
     )
 
     # Only process if there's work to be done
@@ -144,33 +169,54 @@ def log_removal_info(logger: Logger, free_space: float, total_remaining_size_gb:
     logger_utils.log_torrent_removal_info(all_removed_torrents, logger, bonus_rules, config, ratio_log)
 
 
-def main(test_mode: bool, logger: Logger, handler: Any, config: ConfigParser,
-         session: requests.Session) -> int:
-    """Run the cleanup. Returns a process exit code."""
+def run_cleanup(config: ConfigParser, logger: Logger, session: requests.Session,
+                test_mode: bool, state_dir: str) -> int:
+    """Run the cleanup logic. Returns a process exit code."""
     exit_code = 0
     try:
         bonus_rules = torrent_utils.load_bonus_rules(config)
-        check_space_and_remove_torrents(session, logger, config, test_mode, bonus_rules)
+        check_space_and_remove_torrents(session, logger, config, test_mode, bonus_rules, state_dir)
     except torrent_utils.QBittorrentError as e:
         logger.error(str(e))
         exit_code = 1
     except Exception as e:
         logger.error(f"An error occurred: {e}")
         exit_code = 1
-    finally:
-        # Always flush buffered log entries, even after a login failure.
-        handler.write_log_entries()
     return exit_code
 
 
-if __name__ == "__main__":
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-    config = torrent_utils.load_configuration(script_directory)
-    logger, log_handler = logger_utils.setup_logger(config=config)
+def cli() -> int:
+    """CLI entry point: parse args, resolve config, run cleanup.
+
+    Config resolution: CONFIG_PATH env var → --config flag → STATE_DIR/config.ini → ./config.ini
+    State directory: STATE_DIR env var → script directory (also where JSON state files are written)
+    """
+    parser = argparse.ArgumentParser(description='qBittorrent cleanup: remove seeded-out torrents')
+    parser.add_argument('--config', default=None, help='Path to config.ini (default: CONFIG_PATH env, then STATE_DIR/config.ini)')
+    parser.add_argument('--test', action='store_true', help='Log what would be removed without deleting')
+    args = parser.parse_args()
+
+    # Resolve config path
+    if args.config:
+        config_path = args.config
+    else:
+        config_path = _resolve_config_path()
+
+    # Resolve state directory
+    state_dir = _resolve_state_dir()
+
+    # Load config
+    config = _load_config(config_path)
+
+    # Setup logger
+    logger = logger_utils.setup_logger(name='torrent_cleanup', config=config)
+
+    # Setup session
     session = requests.Session()
-    torrent_utils.setup_session_auth(session, config)  # API key auth if configured
-    test_mode = '--test' in sys.argv
-    try:
-        sys.exit(main(test_mode, logger, log_handler, config, session))
-    finally:
-        session.close()
+    torrent_utils.setup_session_auth(session, config)
+
+    return run_cleanup(config, logger, session, args.test, state_dir)
+
+
+if __name__ == "__main__":
+    sys.exit(cli())

@@ -59,6 +59,8 @@ def check_space_and_remove_torrents(session: requests.Session, logger: Logger, c
 
     free_space = torrent_utils.get_free_space(drive_path)
 
+    logger.debug("Free space is %d GB", free_space)
+
     # Load the ratio log once; it is passed around as a dict instead of being
     # re-read from disk for every torrent.
     ratio_log = torrent_utils.load_ratio_log(

@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
-
 [project]
 name = "qbittorrent-auto-delete"
 dynamic = ["version"]
@@ -12,11 +8,15 @@ dependencies = [
 ]
 
 [project.scripts]
-qbittorrent-cleanup = "main:cli"
-qbittorrent-scheduler = "scheduler:main"
+qbittorrent-auto-delete = "qbittorrent_auto_delete.main:cli"
 
 [tool.setuptools.packages.find]
-include = ["*"]
+where = ["src/main/python"]
 
-[tool.setuptools.dynamic]
-version = {attr = "main.__version__"}
+[build-system]
+requires = ["setuptools"]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--import-mode=importlib",
+]

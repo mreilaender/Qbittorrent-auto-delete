@@ -2,3 +2,5 @@ config.ini
 torrent_ratio_log.json
 ratio_grace_state.json
 .idea
+*.egg-info/
+build/

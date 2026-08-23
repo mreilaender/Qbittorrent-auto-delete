@@ -48,7 +48,7 @@ def get_free_space(drive_path: str) -> float:
 
 def load_configuration(script_directory: str) -> configparser.ConfigParser:
     """Load configuration from the config file."""
-    config_path = os.path.join(script_directory, 'config.ini')
+    config_path = os.path.join(script_directory, '../../../../config.ini')
     config = configparser.ConfigParser()
     config.read(config_path)
     return config

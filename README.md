@@ -1,5 +1,7 @@
 # Qbittorrent-auto-delete
 
+Container friendly version of [Mythic82/Qbittorrent-auto-delete](https://github.com/Mythic82/Qbittorrent-auto-delete).
+
 Tired of managing complex seeding rules and manually selecting torrents to remove when your disk space runs low? This script is designed to simplify your life. Once set up, you only need to define seeding rules for each category. Then, as you add new torrents to these categories, they'll be managed automatically.
 
 When your drive starts to fill up, the script takes action. It prioritizes removing the least performing torrents - those with the lowest seeding ratio over the past month - until it reaches your specified free disk space or torrent count.

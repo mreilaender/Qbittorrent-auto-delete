@@ -20,6 +20,7 @@ import schedule
 import requests
 
 from qbittorrent_auto_delete import logger_utils,torrent_utils
+from qbittorrent_auto_delete.main import run_cleanup
 
 __version__ = "0.1.0"
 
@@ -65,7 +66,7 @@ def run_cleanup_job(config: configparser.ConfigParser, state_dir: str) -> None:
     session = requests.Session()
     try:
         torrent_utils.setup_session_auth(session, config)
-        exit_code = main.run_cleanup(config, logger, session, test_mode=False, state_dir=state_dir)
+        exit_code = run_cleanup(config, logger, session, test_mode=False, state_dir=state_dir)
         if exit_code != 0:
             logger.warning("Cleanup job finished with exit code %d", exit_code)
     except Exception as e:

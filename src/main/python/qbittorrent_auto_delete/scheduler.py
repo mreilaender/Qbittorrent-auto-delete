@@ -17,6 +17,7 @@ import configparser
 from logging import Logger
 
 import schedule
+import requests
 
 from qbittorrent_auto_delete import logger_utils,torrent_utils
 
